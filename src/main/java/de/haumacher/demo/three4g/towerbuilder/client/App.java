@@ -1,18 +1,14 @@
 package de.haumacher.demo.three4g.towerbuilder.client;
 
 import org.treblereel.gwt.three4g.cameras.PerspectiveCamera;
-import org.treblereel.gwt.three4g.core.BufferGeometry;
 import org.treblereel.gwt.three4g.core.Object3D;
 import org.treblereel.gwt.three4g.geometries.BoxGeometry;
 import org.treblereel.gwt.three4g.lights.AmbientLight;
 import org.treblereel.gwt.three4g.lights.DirectionalLight;
-import org.treblereel.gwt.three4g.materials.LineBasicMaterial;
 import org.treblereel.gwt.three4g.materials.MeshPhongMaterial;
-import org.treblereel.gwt.three4g.materials.parameters.LineBasicMaterialParameters;
 import org.treblereel.gwt.three4g.materials.parameters.MeshPhongMaterialParameters;
 import org.treblereel.gwt.three4g.math.Color;
 import org.treblereel.gwt.three4g.math.Vector3;
-import org.treblereel.gwt.three4g.objects.Line;
 import org.treblereel.gwt.three4g.objects.Mesh;
 import org.treblereel.gwt.three4g.renderers.WebGLRenderer;
 import org.treblereel.gwt.three4g.renderers.parameters.WebGLRendererParameters;
@@ -93,13 +89,6 @@ public class App implements EntryPoint {
 
 		_scene = new Scene();
 		
-		// Create a coordinate system for debugging.
-		if (false) {
-			_scene.add(line(v(0, 0, 10), v(0,0,-10), 0xFF0000));
-			_scene.add(line(v(-10, 0, 0), v(10,0,0), 0x0000FF));
-			_scene.add(line(v(0, -10, 0), v(0,10,0), 0x00FF00));
-		}
-
 		// Create lights.
 		{
 			int color = 0xFFFFFF;
@@ -165,24 +154,10 @@ public class App implements EntryPoint {
 		_scene.add(_cube);
 	}
 
-	private static Object3D line(Vector3 from, Vector3 to, int color) {
-		return new Line(new BufferGeometry<>().setFromPoints(points(from, to)), lineBasicMaterial(color));
-	}
-
-	private static LineBasicMaterial lineBasicMaterial(int color) {
-		LineBasicMaterialParameters parameters = new LineBasicMaterialParameters();
-		parameters.color = new Color(color);
-		return new LineBasicMaterial(parameters);
-	}
-
 	private static Vector3 v(int x, int y, int z) {
 		return new Vector3(x, y, z);
 	}
 
-	private static Vector3[] points(Vector3 ...vs) {
-		return vs;
-	}
-	
 	void onKeyDown(Event event) {
 		_scene.remove(_cube);
 		
