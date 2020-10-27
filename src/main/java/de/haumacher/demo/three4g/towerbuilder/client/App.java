@@ -32,6 +32,8 @@ import elemental2.dom.HTMLCanvasElement;
  * https://threejsfundamentals.org/threejs/lessons/threejs-fundamentals.html to
  * GWT using the three4g API.
  * </p>
+ * 
+ * @author <a href="mailto:haui@haumacher.de">Bernhard Haumacher</a>
  */
 public class App implements EntryPoint {
 	private Scene _scene;
@@ -41,13 +43,10 @@ public class App implements EntryPoint {
 	private PerspectiveCamera _camera;
 
 	private WebGLRenderer _renderer;
-	
-	private float _targetX1 = -3;
-	private float _targetX2 = 3;
-	private float _targetY1 = -3;
-	private float _targetY2 = 3;
 
-	private Direction _direction = Direction.TO_FRONT;
+	private Tower _towerModel = new Tower();
+	
+	private Direction _direction = Direction.BACK_TO_FRONT;
 
 	private Object3D _tower;
 
@@ -62,6 +61,8 @@ public class App implements EntryPoint {
 	private double _fragmentTimeOffset;
 
 	private float _fragmentSpeed;
+
+	private float _fragmentBottom;
 	
 	static final float BOX_DEPTH = 0.5f;
 
@@ -69,6 +70,7 @@ public class App implements EntryPoint {
 
 	@Override
 	public void onModuleLoad() {
+		_towerModel.add(new Platform(-3, 3, -3, 3));
 		HTMLCanvasElement canvas = 
 			(HTMLCanvasElement) DomGlobal.document.getElementById("canvas");
 
@@ -118,8 +120,9 @@ public class App implements EntryPoint {
 		_tower = new Object3D();
 		_scene.add(_tower);
 		
-		float targetWidth = _targetX2 - _targetX1;
-		float targetHeight = _targetY2 - _targetY1;
+		Platform top = top();
+		float targetWidth = top.width();
+		float targetHeight = top.height();
 		BoxGeometry targetGeometry = new BoxGeometry(targetWidth, targetHeight, BOX_DEPTH);
 		Mesh target = new Mesh(targetGeometry, createMaterial());
 		target.position.set(0, 0, -BOX_DEPTH);
@@ -129,6 +132,10 @@ public class App implements EntryPoint {
 
 		// Start the event loop by requesting the first update.
 		DomGlobal.requestAnimationFrame(this::startEvent);
+	}
+	
+	Platform top() {
+		return _towerModel.top();
 	}
 
 	private MeshPhongMaterial createMaterial() {
@@ -147,14 +154,13 @@ public class App implements EntryPoint {
 	}
 
 	private void createCube() {
-		_boxWidth = _targetX2 - _targetX1;
-		_boxHeight = _targetY2 - _targetY1;
-		BoxGeometry boxGeometry = new BoxGeometry(_boxWidth, _boxHeight, BOX_DEPTH);
+		Platform top = top();
+		BoxGeometry boxGeometry = new BoxGeometry(top.width(), top.height(), BOX_DEPTH);
 		_cube = new Mesh(boxGeometry, createMaterial());
-		if (_direction == Direction.TO_FRONT) {
-			_cube.position.set(_targetX1 + _boxWidth / 2, 8, 0);
+		if (_direction == Direction.BACK_TO_FRONT) {
+			_cube.position.set(top.centerX(), 8, 0);
 		} else {
-			_cube.position.set(-8, _targetY1 + _boxHeight / 2, 0);
+			_cube.position.set(-8, top.centerY(), 0);
 		}
 		_scene.add(_cube);
 	}
@@ -180,40 +186,46 @@ public class App implements EntryPoint {
 	void onKeyDown(Event event) {
 		_scene.remove(_cube);
 		
-		float cubeX1 = _cube.position.x - _boxWidth / 2;
-		float cubeX2 = _cube.position.x + _boxWidth / 2;
-		float cubeY1 = _cube.position.y - _boxHeight / 2;
-		float cubeY2 = _cube.position.y + _boxHeight / 2;
-
-		float matchX1 = Math.max(_targetX1, cubeX1);
-		float matchX2 = Math.min(_targetX2, cubeX2);
-		float matchY1 = Math.max(_targetY1, cubeY1);
-		float matchY2 = Math.min(_targetY2, cubeY2);
+		Platform top = top();
 		
-		float matchW = matchX2 - matchX1;
-		float matchH = matchY2 - matchY1;
+		float boxWidth = top.width();
+		float boxHeight = top.height();
+		
+		float cubeX1 = _cube.position.x - boxWidth / 2;
+		float cubeX2 = _cube.position.x + boxWidth / 2;
+		float cubeY1 = _cube.position.y - boxHeight / 2;
+		float cubeY2 = _cube.position.y + boxHeight / 2;
+		
+		Platform match = top.intersect(new Platform(cubeX1, cubeX2, cubeY1, cubeY2));
+		
+		float matchW = match.width();
+		float matchH = match.height();
 		
 		if (matchW <= 0.0 || matchH <= 0.0) {
 			_stop = true;
 			return;
 		}
 		
-		float matchX = matchX1 + matchW /2;
-		float matchY = matchY1 + matchH /2;
+		float matchX = match.centerX();
+		float matchY = match.centerY();
 		
-		if (_direction == Direction.TO_FRONT) {
-			float fragmentSize = _cube.position.y - (_targetY1 + _targetY2) / 2;
+		Side side;
+		float fragmentSize;
+		if (_direction == Direction.BACK_TO_FRONT) {
+			fragmentSize = _cube.position.y - top.centerY();
 			if (Math.abs(fragmentSize) < MIN_FRAGMENT) {
-				matchY1 = _targetY1;
-				matchY2 = _targetY2;
+				match = top.copy();
+				side = null;
 			} else {
 				float fragmentY;
 				if (fragmentSize > 0) {
 					// Behind the tower.
-					fragmentY = _targetY2 + fragmentSize / 2;
+					fragmentY = top.getY2() + fragmentSize / 2;
+					side = Side.BACK;
 				} else {
 					// In front of the tower.
-					fragmentY = _targetY1 + fragmentSize / 2;
+					fragmentY = top.getY1() + fragmentSize / 2;
+					side = Side.FRONT;
 				}
 				
 				clearFragment();
@@ -225,18 +237,20 @@ public class App implements EntryPoint {
 				_scene.add(_fragment);
 			}
 		} else {
-			float fragmentSize = _cube.position.x - (_targetX1 + _targetX2) / 2;
+			fragmentSize = _cube.position.x - top.centerX();
 			if (Math.abs(fragmentSize) < MIN_FRAGMENT) {
-				matchX1 = _targetX1;
-				matchX2 = _targetX2;
+				match = top.copy();
+				side = null;
 			} else {
 				float fragmentX;
 				if (fragmentSize > 0) {
 					// At the right.
-					fragmentX = _targetX2 + fragmentSize / 2;
+					fragmentX = top.getX2() + fragmentSize / 2;
+					side = Side.RIGHT;
 				} else {
 					// At the left.
-					fragmentX = _targetX1 + fragmentSize / 2;
+					fragmentX = top.getX1() + fragmentSize / 2;
+					side = Side.LEFT;
 				}
 				
 				clearFragment();
@@ -249,16 +263,23 @@ public class App implements EntryPoint {
 			}
 		}
 		
+		if (side != null) {
+			int fragmentLevel = _towerModel.edgeLevel(side);
+			if (fragmentLevel > 0) {
+				_fragmentBottom = -(fragmentLevel + 1) * BOX_DEPTH;
+				_towerModel.get(fragmentLevel - 1).incPosition(side, fragmentSize);
+			} else {
+				_fragmentBottom = -30.0f;
+			}
+		}
+		
 		BoxGeometry matchGeometry = new BoxGeometry(matchW, matchH, BOX_DEPTH);
 		Mesh matchCube = new Mesh(matchGeometry, _cube.material);
 		matchCube.position.set(matchX, matchY, -_tower.position.z);
 		_tower.add(matchCube);
 		_tower.position.z -= BOX_DEPTH;
 
-		_targetX1 = matchX1;
-		_targetX2 = matchX2;
-		_targetY1 = matchY1;
-		_targetY2 = matchY2;
+		_towerModel.add(match);
 		
 		_direction = _direction.next();
 		createCube();
@@ -315,10 +336,6 @@ public class App implements EntryPoint {
 
 	private double _boxTime;
 
-	private float _boxWidth;
-
-	private float _boxHeight;
-	
 	void update(double timestamp) {
 		_currentTime = timestamp;
 		_boxTime = timestamp - _boxTimeOffset;
@@ -335,7 +352,7 @@ public class App implements EntryPoint {
 			deltaY = DELTA_2 - deltaY;
 		}
 		
-		if (_direction == Direction.TO_FRONT) {
+		if (_direction == Direction.BACK_TO_FRONT) {
 			_cube.position.y = 10 - deltaY;
 		} else {
 			_cube.position.x = -10 + deltaY;
@@ -345,7 +362,15 @@ public class App implements EntryPoint {
 			float deltaT = (float) (timestamp - _fragmentTimeOffset);
 			_fragmentSpeed += FRAGMENT_ACCELERATION * deltaT;
 			_fragment.position.z -= _fragmentSpeed;
-			if (_fragment.position.z < -10) {
+			if (_fragment.position.z < _fragmentBottom) {
+				_scene.remove(_fragment);
+				
+				_fragment.position.z = _fragmentBottom - _tower.position.z;
+				_tower.add(_fragment);
+				_fragment = null;
+				
+				clearFragment();
+			} else if (_fragment.position.z < -20) {
 				clearFragment();
 			}
 		}
