@@ -59,6 +59,8 @@ public class App implements EntryPoint {
 	private float _fragmentSpeed;
 
 	private float _fragmentBottom;
+
+	private Direction _fragmentDirection;
 	
 	static final float BOX_DEPTH = 0.5f;
 
@@ -66,12 +68,9 @@ public class App implements EntryPoint {
 
 	@Override
 	public void onModuleLoad() {
-		_towerModel.add(new Platform(-3, 3, -3, 3));
-		HTMLCanvasElement canvas = 
-			(HTMLCanvasElement) DomGlobal.document.getElementById("canvas");
-
+		HTMLCanvasElement canvas = (HTMLCanvasElement) DomGlobal.document.getElementById("canvas");
 		DomGlobal.document.addEventListener("keydown", this::onKeyDown);
-		
+
 		WebGLRendererParameters rendererParams = new WebGLRendererParameters();
 		rendererParams.canvas = canvas;
 		_renderer = new WebGLRenderer(rendererParams);
@@ -82,8 +81,8 @@ public class App implements EntryPoint {
 		float near = 2f;
 		float far = 23;
 		_camera = new PerspectiveCamera(fov, aspect, near, far);
-		_camera.position.set(5, -8, 2);
-		_camera.rotateOnWorldAxis(v(1,0,0), (float)((Math.PI / 2) -Math.atan2(2, 8)));
+		_camera.position.set(5, -8, 5);
+		_camera.rotateOnWorldAxis(v(1,0,0), (float)((Math.PI / 2) -Math.atan2(5, 8)));
 		_camera.rotateOnWorldAxis(v(0,0,1), (float) Math.atan2(5, 8));
 		_camera.updateProjectionMatrix();
 
@@ -107,15 +106,16 @@ public class App implements EntryPoint {
 
 		// Create target platform
 		_tower = new Object3D();
+		_tower.position.set(0, 0, -BOX_DEPTH);
 		_scene.add(_tower);
 		
-		Platform top = top();
-		float targetWidth = top.width();
-		float targetHeight = top.height();
-		BoxGeometry targetGeometry = new BoxGeometry(targetWidth, targetHeight, BOX_DEPTH);
-		Mesh target = new Mesh(targetGeometry, createMaterial());
-		target.position.set(0, 0, -BOX_DEPTH);
-		_tower.add(target);
+		Platform topModel = new Platform(-3, 3, -3, 3);
+		_towerModel.add(topModel);
+
+		BoxGeometry topGeometry = new BoxGeometry(topModel.width(), topModel.height(), BOX_DEPTH);
+		Mesh top = new Mesh(topGeometry, createMaterial());
+		top.position.set(0, 0, 0);
+		_tower.add(top);
 		
 		createCube();
 
@@ -184,73 +184,72 @@ public class App implements EntryPoint {
 		float matchX = match.centerX();
 		float matchY = match.centerY();
 		
-		Side side;
-		float fragmentSize;
 		if (_direction == Direction.BACK_TO_FRONT) {
-			fragmentSize = _cube.position.y - top.centerY();
-			if (Math.abs(fragmentSize) < MIN_FRAGMENT) {
+			_fragmentSize = _cube.position.y - top.centerY();
+			if (Math.abs(_fragmentSize) < MIN_FRAGMENT) {
 				match = top.copy();
-				side = null;
+				_fragmentSide = null;
 			} else {
 				float fragmentY;
-				if (fragmentSize > 0) {
+				if (_fragmentSize > 0) {
 					// Behind the tower.
-					fragmentY = top.getY2() + fragmentSize / 2;
-					side = Side.BACK;
+					fragmentY = top.getY2() + _fragmentSize / 2;
+					_fragmentSide = Side.BACK;
 				} else {
 					// In front of the tower.
-					fragmentY = top.getY1() + fragmentSize / 2;
-					side = Side.FRONT;
+					fragmentY = top.getY1() + _fragmentSize / 2;
+					_fragmentSide = Side.FRONT;
 				}
 				
 				clearFragment();
-				BoxGeometry fragmentGeometry = new BoxGeometry(matchW, Math.abs(fragmentSize), BOX_DEPTH);
+				BoxGeometry fragmentGeometry = new BoxGeometry(matchW, Math.abs(_fragmentSize), BOX_DEPTH);
 				_fragment = new Mesh(fragmentGeometry, _cube.material);
-				_fragment.position.set(matchX, fragmentY, 0);
+				_fragment.position.set(matchX, fragmentY, BOX_DEPTH * _towerModel.height());
 				_fragmentSpeed = 0.0f;
 				_fragmentTimeOffset = _currentTime;
-				_scene.add(_fragment);
+				_fragmentDirection = _direction;
+				_tower.add(_fragment);
 			}
 		} else {
-			fragmentSize = _cube.position.x - top.centerX();
-			if (Math.abs(fragmentSize) < MIN_FRAGMENT) {
+			_fragmentSize = _cube.position.x - top.centerX();
+			if (Math.abs(_fragmentSize) < MIN_FRAGMENT) {
 				match = top.copy();
-				side = null;
+				_fragmentSide = null;
 			} else {
 				float fragmentX;
-				if (fragmentSize > 0) {
+				if (_fragmentSize > 0) {
 					// At the right.
-					fragmentX = top.getX2() + fragmentSize / 2;
-					side = Side.RIGHT;
+					fragmentX = top.getX2() + _fragmentSize / 2;
+					_fragmentSide = Side.RIGHT;
 				} else {
 					// At the left.
-					fragmentX = top.getX1() + fragmentSize / 2;
-					side = Side.LEFT;
+					fragmentX = top.getX1() + _fragmentSize / 2;
+					_fragmentSide = Side.LEFT;
 				}
 				
 				clearFragment();
-				BoxGeometry fragmentGeometry = new BoxGeometry(Math.abs(fragmentSize), matchH, BOX_DEPTH);
+				BoxGeometry fragmentGeometry = new BoxGeometry(Math.abs(_fragmentSize), matchH, BOX_DEPTH);
 				_fragment = new Mesh(fragmentGeometry, _cube.material);
-				_fragment.position.set(fragmentX, matchY, 0);
+				_fragment.position.set(fragmentX, matchY, BOX_DEPTH * _towerModel.height());
 				_fragmentSpeed = 0.0f;
 				_fragmentTimeOffset = _currentTime;
-				_scene.add(_fragment);
+				_fragmentDirection = _direction;
+				_tower.add(_fragment);
 			}
 		}
 		
-		if (side != null) {
-			int fragmentLevel = _towerModel.edgeLevel(side);
-			if (fragmentLevel > 0) {
-				_fragmentBottom = -(fragmentLevel + 1) * BOX_DEPTH;
-				_towerModel.get(fragmentLevel - 1).incPosition(side, fragmentSize);
-			} else {
+		if (_fragmentSide != null) {
+			_fragmentLevel = _towerModel.edgeLevel(_fragmentSide);
+			if (_fragmentLevel < 0) {
 				_fragmentBottom = -30.0f;
+			} else {
+				_fragmentBottom = BOX_DEPTH * (_fragmentLevel + 1);
 			}
 		}
 		
 		BoxGeometry matchGeometry = new BoxGeometry(matchW, matchH, BOX_DEPTH);
 		Mesh matchCube = new Mesh(matchGeometry, _cube.material);
-		matchCube.position.set(matchX, matchY, -_tower.position.z);
+		matchCube.position.set(matchX, matchY, BOX_DEPTH * _towerModel.height());
 		_tower.add(matchCube);
 		_tower.position.z -= BOX_DEPTH;
 
@@ -267,7 +266,7 @@ public class App implements EntryPoint {
 	 */
 	private void clearFragment() {
 		if (_fragment != null) {
-			_scene.remove(_fragment);
+			_tower.remove(_fragment);
 			_fragment = null;
 		}
 	}
@@ -301,7 +300,7 @@ public class App implements EntryPoint {
 	private double _nuberCycles = 0;
 	
 	// Number of milliseconds for one trip back and forth.
-	private static final double PERIOD_MS = 5000;
+	private static final double PERIOD_MS = 3000;
 
 	private static final float DELTA = 13;
 	private static final float DELTA_2 = 2 * DELTA;
@@ -310,6 +309,22 @@ public class App implements EntryPoint {
 	private static final float FRAGMENT_ACCELERATION = 0.0001f;
 
 	private double _boxTime;
+
+	/**
+	 * The level the currently falling fragment will break at next.
+	 * 
+	 * <p>
+	 * A value of <code>-1</code> means that the fragment will fall down to negative infinity.
+	 * </p>
+	 */
+	private int _fragmentLevel;
+
+	/**
+	 * The {@link Side} of the tower the current fragment is falling down.
+	 */
+	private Side _fragmentSide;
+
+	private float _fragmentSize;
 
 	void update(double timestamp) {
 		_currentTime = timestamp;
@@ -338,15 +353,72 @@ public class App implements EntryPoint {
 			_fragmentSpeed += FRAGMENT_ACCELERATION * deltaT;
 			_fragment.position.z -= _fragmentSpeed;
 			if (_fragment.position.z < _fragmentBottom) {
-				_scene.remove(_fragment);
-				
-				_fragment.position.z = _fragmentBottom - _tower.position.z;
-				_tower.add(_fragment);
-				_fragment = null;
-				
-				clearFragment();
-			} else if (_fragment.position.z < -20) {
-				clearFragment();
+				if (_fragmentLevel < 0) {
+					// Fragment has fallen to negative infinity.
+					clearFragment();
+				} else {
+					float position = _towerModel.get(_fragmentLevel + 1).position(_fragmentSide);
+					float landingPosition = _towerModel.get(_fragmentLevel).position(_fragmentSide);
+					
+					float landingSize = landingPosition - position;
+					float nextFragmentSize = _fragmentSize - landingSize;
+					
+					if (!_fragmentSide.pointsToOutside(nextFragmentSize)) {
+						// Fragment completely fits to the platform it is fallen to.
+						_fragment.position.z = BOX_DEPTH * (_fragmentLevel + 1);
+						
+						// Enlarge the platform on the level where the fragment stopped.
+						_towerModel.get(_fragmentLevel + 1).incPosition(_fragmentSide, _fragmentSize);
+						
+						// Stop fragment animation.
+						_fragment = null;
+					} else {
+						Platform top = top();
+						
+						// Break fragment into two.
+						Mesh landingFragment;
+						Mesh nextFragment;
+						if (_fragmentDirection == Direction.BACK_TO_FRONT) {
+							float width = top.width();
+							float centerX = top.centerX();
+							BoxGeometry landingGeometry = new BoxGeometry(width, Math.abs(landingSize), BOX_DEPTH);
+							landingFragment = new Mesh(landingGeometry, _fragment.material);
+							landingFragment.position.set(centerX, position + landingSize / 2, BOX_DEPTH * (_fragmentLevel + 1));
+							
+							BoxGeometry nextGeometry = new BoxGeometry(width, Math.abs(nextFragmentSize), BOX_DEPTH);
+							nextFragment = new Mesh(nextGeometry, _fragment.material);
+							nextFragment.position.set(centerX, landingPosition + nextFragmentSize / 2, _fragment.position.z);
+						} else {
+							float height = top.height();
+							float centerY = top.centerY();
+							BoxGeometry landingGeometry = new BoxGeometry(Math.abs(landingSize), height, BOX_DEPTH);
+							landingFragment = new Mesh(landingGeometry, _fragment.material);
+							landingFragment.position.set(position + landingSize / 2, centerY, BOX_DEPTH * (_fragmentLevel + 1));
+							
+							BoxGeometry nextGeometry = new BoxGeometry(Math.abs(nextFragmentSize), height, BOX_DEPTH);
+							nextFragment = new Mesh(nextGeometry, _fragment.material);
+							nextFragment.position.set(landingPosition + nextFragmentSize / 2, centerY, _fragment.position.z);
+						}
+
+						_tower.add(landingFragment);
+						
+						_tower.remove(_fragment);
+						_fragment = nextFragment;
+						_fragmentSize = nextFragmentSize;
+						_tower.add(_fragment);
+						
+						// Enlarge the platform on the level where the fragment stopped.
+						_towerModel.get(_fragmentLevel + 1).setPosition(_fragmentSide, landingPosition);
+						
+						int nextLevel = _towerModel.edgeLevel(_fragmentSide, _fragmentLevel);
+						if (nextLevel < 0) {
+							_fragmentBottom = -30;
+						} else {
+							_fragmentBottom = BOX_DEPTH * (nextLevel - 1);
+						}
+						_fragmentLevel = nextLevel;
+					}
+				}
 			}
 		}
 

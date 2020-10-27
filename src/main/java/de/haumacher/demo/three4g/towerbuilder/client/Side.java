@@ -7,6 +7,20 @@ package de.haumacher.demo.three4g.towerbuilder.client;
  */
 public enum Side {
 	
-	BACK, FRONT, RIGHT, LEFT
+	BACK, FRONT, RIGHT, LEFT;
+
+	/** 
+	 * Whether adding the given value to a {@link Platform#position(Side)} makes the tower wider.
+	 */
+	boolean pointsToOutside(float length) {
+		switch (this) {
+		case RIGHT:
+		case BACK:
+			return length > 0;
+
+		default:
+			return length < 0;
+		}
+	}
 
 }
